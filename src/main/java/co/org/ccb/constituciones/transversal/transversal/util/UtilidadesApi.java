@@ -28,7 +28,7 @@ public class UtilidadesApi {
             if (expirationDateTime.isBefore(LocalDateTime.now(ZoneId.systemDefault()))) throw new UnauthorizedException("Token expirado");
             UsuarioSesion usuario = UsuarioSesion.builder()
                     .service(request.getRequestURI())
-                    .usuario(respuesta.get("user_name").toString())
+                    .usuario(respuesta.get("sub").toString())
                     .token(autorizacion.split("Bearer ")[1])
                     .build();
             UtilidadesApi.session = usuario;

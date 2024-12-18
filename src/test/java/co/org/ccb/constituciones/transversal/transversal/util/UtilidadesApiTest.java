@@ -8,7 +8,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
 
@@ -27,12 +26,12 @@ class UtilidadesApiTest {
     void setUp() {
         // Crear un token JWT válido (exp: 1 hora en el futuro)
         long futureTime = System.currentTimeMillis() / 1000 + 3600; // Una hora en el futuro
-        String validPayload = String.format("{\"user_name\":\"testuser\",\"exp\":%d}", futureTime);
+        String validPayload = String.format("{\"sub\":\"testuser\",\"exp\":%d}", futureTime);
         validJwtToken = createJwtToken(validPayload);
 
         // Crear un token JWT expirado (exp: 1 hora en el pasado)
         long pastTime = System.currentTimeMillis() / 1000 - 3600; // Una hora en el pasado
-        String expiredPayload = String.format("{\"user_name\":\"testuser\",\"exp\":%d}", pastTime);
+        String expiredPayload = String.format("{\"sub\":\"testuser\",\"exp\":%d}", pastTime);
         expiredJwtToken = createJwtToken(expiredPayload);
 
         // Reset session antes de cada prueba
@@ -117,7 +116,7 @@ class UtilidadesApiTest {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals("testuser", resultado.get("user_name"));
+        assertEquals("testuser", resultado.get("sub"));
         assertNotNull(resultado.get("exp"));
     }
 
