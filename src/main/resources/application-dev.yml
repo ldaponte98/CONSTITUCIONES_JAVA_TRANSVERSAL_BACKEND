@@ -28,5 +28,5 @@ logging:
       springframework:
         web:
           filter: DEBUG
-client:
-  transversal: http://localhost:8085/transversal/v1
+authorization:
+  key-anonymous: 1HwyCOpBv45tpC5H

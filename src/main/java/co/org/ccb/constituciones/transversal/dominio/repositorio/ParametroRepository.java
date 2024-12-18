@@ -9,5 +9,6 @@ import java.util.List;
 @Repository
 public interface ParametroRepository extends JpaRepository<ParametroEntidad, Integer> {
     ParametroEntidad findByCodigo(String codigo);
+    List<ParametroEntidad> findAllByCodigoIn(List<String> codigos);
     List<ParametroEntidad> findAllByCodigoPadreAndActivo(String codigoPadre, Integer active);
 }

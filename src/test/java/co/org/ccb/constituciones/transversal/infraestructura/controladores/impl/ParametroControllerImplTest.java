@@ -2,9 +2,10 @@ package co.org.ccb.constituciones.transversal.infraestructura.controladores.impl
 
 import co.org.ccb.constituciones.transversal.aplicacion.parametros.ConsultarParametroPorCodigoService;
 import co.org.ccb.constituciones.transversal.aplicacion.parametros.ConsultarParametrosPorPadreService;
+import co.org.ccb.constituciones.transversal.aplicacion.parametros.ConsultarVariosParametrosPorCodigoService;
 import co.org.ccb.constituciones.transversal.dominio.entidad.ParametroEntidad;
+import co.org.ccb.constituciones.transversal.infraestructura.entrada.ConsultarVariosParametrosRequest;
 import co.org.ccb.constituciones.transversal.transversal.util.RespuestaBase;
-import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,14 +13,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
-import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ParametroControllerImplTest {
@@ -31,145 +30,112 @@ class ParametroControllerImplTest {
     private ConsultarParametrosPorPadreService consultarParametrosPorPadreService;
 
     @Mock
-    private HttpServletRequest request;
+    private ConsultarVariosParametrosPorCodigoService consultarVariosParametrosPorCodigoService;
 
     @InjectMocks
     private ParametroControllerImpl controller;
 
-    private ParametroEntidad parametroMock;
-    private List<ParametroEntidad> parametrosListMock;
+    private ParametroEntidad parametro;
+    private List<ParametroEntidad> parametros;
 
     @BeforeEach
     void setUp() {
-        parametroMock = new ParametroEntidad();
-        parametroMock.setCodigo("TEST_CODE");
-        parametroMock.setValor("Test Value");
+        parametro = new ParametroEntidad();
+        parametro.setCodigo("TEST_CODE");
+        parametro.setValor("Test Value");
 
-        parametrosListMock = Arrays.asList(
-                parametroMock,
-                new ParametroEntidad()
+        parametros = Arrays.asList(
+                parametro,
+                createParametro("TEST_CODE_2", "Test Value 2")
         );
     }
 
+    private ParametroEntidad createParametro(String codigo, String valor) {
+        ParametroEntidad param = new ParametroEntidad();
+        param.setCodigo(codigo);
+        param.setValor(valor);
+        return param;
+    }
+
     @Test
-    void consultarPorCodigo_DeberiaRetornarParametroExistente() {
+    void consultarPorCodigo_DebeRetornarParametro_CuandoExisteCodigo() {
         // Arrange
         String codigo = "TEST_CODE";
-        when(consultarParametroPorCodigoService.buscarPorCodigo(codigo))
-                .thenReturn(parametroMock);
+        when(consultarParametroPorCodigoService.buscarPorCodigo(codigo)).thenReturn(parametro);
 
         // Act
-        RespuestaBase res = new RespuestaBase();
-        ResponseEntity<RespuestaBase> response = controller.consultarPorCodigo(request, codigo);
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(true, response.getBody().isExito());
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("OK", response.getBody().getMensaje());
-        assertEquals(parametroMock, response.getBody().getDetalle());
-
-        verify(consultarParametroPorCodigoService).buscarPorCodigo(codigo);
-    }
-
-    @Test
-    void consultarPorCodigo_DeberiaRetornarNullCuandoNoExisteParametro() {
-        // Arrange
-        String codigo = "NONEXISTENT_CODE";
-        when(consultarParametroPorCodigoService.buscarPorCodigo(codigo))
-                .thenReturn(null);
-
-        // Act
-        ResponseEntity<RespuestaBase> response = controller.consultarPorCodigo(request, codigo);
+        var response = controller.consultarPorCodigo(codigo);
 
         // Assert
         assertNotNull(response);
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("OK", response.getBody().getMensaje());
-        assertNull(response.getBody().getDetalle());
-
+        RespuestaBase respuestaBase = response.getBody();
+        assertNotNull(respuestaBase);
+        assertEquals("OK", respuestaBase.getMensaje());
+        assertEquals(parametro, respuestaBase.getDetalle());
         verify(consultarParametroPorCodigoService).buscarPorCodigo(codigo);
     }
 
     @Test
-    void consultarPorPadre_DeberiaRetornarListaDeParametros() {
+    void consultarPorPadre_DebeRetornarListaParametros_CuandoExisteCodigoPadre() {
         // Arrange
         String codigoPadre = "PARENT_CODE";
-        when(consultarParametrosPorPadreService.buscarParametros(codigoPadre))
-                .thenReturn(parametrosListMock);
+        when(consultarParametrosPorPadreService.buscarParametros(codigoPadre)).thenReturn(parametros);
 
         // Act
-        ResponseEntity<RespuestaBase> response = controller.consultarPorPadre(request, codigoPadre);
+        var response = controller.consultarPorPadre(codigoPadre);
 
         // Assert
         assertNotNull(response);
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("OK", response.getBody().getMensaje());
-        assertEquals(parametrosListMock, response.getBody().getDetalle());
-
+        RespuestaBase respuestaBase = response.getBody();
+        assertNotNull(respuestaBase);
+        assertEquals("OK", respuestaBase.getMensaje());
+        assertEquals(parametros, respuestaBase.getDetalle());
         verify(consultarParametrosPorPadreService).buscarParametros(codigoPadre);
     }
 
     @Test
-    void consultarPorPadre_DeberiaRetornarListaVaciaCuandoNoHayResultados() {
+    void consultarPorCodigos_DebeRetornarListaParametros_CuandoExistenCodigos() {
         // Arrange
-        String codigoPadre = "EMPTY_PARENT";
-        when(consultarParametrosPorPadreService.buscarParametros(codigoPadre))
-                .thenReturn(Collections.emptyList());
+        List<String> codigos = Arrays.asList("TEST_CODE", "TEST_CODE_2");
+        ConsultarVariosParametrosRequest request = new ConsultarVariosParametrosRequest();
+        request.setCodigos(codigos);
+
+        when(consultarVariosParametrosPorCodigoService.buscarPorCodigos(codigos)).thenReturn(parametros);
 
         // Act
-        ResponseEntity<RespuestaBase> response = controller.consultarPorPadre(request, codigoPadre);
+        var response = controller.consultarPorCodigos(request);
 
         // Assert
         assertNotNull(response);
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("OK", response.getBody().getMensaje());
-        assertTrue(((List<?>) response.getBody().getDetalle()).isEmpty());
-
-        verify(consultarParametrosPorPadreService).buscarParametros(codigoPadre);
+        RespuestaBase respuestaBase = response.getBody();
+        assertNotNull(respuestaBase);
+        assertEquals("OK", respuestaBase.getMensaje());
+        assertEquals(parametros, respuestaBase.getDetalle());
+        verify(consultarVariosParametrosPorCodigoService).buscarPorCodigos(codigos);
     }
 
     @Test
-    void consultarPorCodigo_DeberiaFuncionarConCodigoVacio() {
+    void consultarPorCodigos_DebeRetornarListaVacia_CuandoRequestEsVacio() {
         // Arrange
-        String codigo = "";
-        when(consultarParametroPorCodigoService.buscarPorCodigo(codigo))
-                .thenReturn(null);
+        ConsultarVariosParametrosRequest request = new ConsultarVariosParametrosRequest();
+        request.setCodigos(Arrays.asList());
+
+        when(consultarVariosParametrosPorCodigoService.buscarPorCodigos(Arrays.asList()))
+                .thenReturn(Arrays.asList());
 
         // Act
-        ResponseEntity<RespuestaBase> response = controller.consultarPorCodigo(request, codigo);
+        var response = controller.consultarPorCodigos(request);
 
         // Assert
         assertNotNull(response);
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("OK", response.getBody().getMensaje());
-        assertNull(response.getBody().getDetalle());
-
-        verify(consultarParametroPorCodigoService).buscarPorCodigo(codigo);
-    }
-
-    @Test
-    void consultarPorPadre_DeberiaFuncionarConCodigoPadreVacio() {
-        // Arrange
-        String codigoPadre = "";
-        when(consultarParametrosPorPadreService.buscarParametros(codigoPadre))
-                .thenReturn(Collections.emptyList());
-
-        // Act
-        ResponseEntity<RespuestaBase> response = controller.consultarPorPadre(request, codigoPadre);
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("OK", response.getBody().getMensaje());
-        assertTrue(((List<?>) response.getBody().getDetalle()).isEmpty());
-
-        verify(consultarParametrosPorPadreService).buscarParametros(codigoPadre);
+        RespuestaBase respuestaBase = response.getBody();
+        assertNotNull(respuestaBase);
+        assertEquals("OK", respuestaBase.getMensaje());
+        assertTrue(((List<?>) respuestaBase.getDetalle()).isEmpty());
+        verify(consultarVariosParametrosPorCodigoService).buscarPorCodigos(Arrays.asList());
     }
 }
