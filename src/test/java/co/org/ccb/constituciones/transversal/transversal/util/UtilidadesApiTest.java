@@ -8,40 +8,51 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class UtilidadesApiTest {
-
     @Mock
     private HttpServletRequest request;
 
-    private String validToken;
-    private String expiredToken;
+    private String validJwtToken;
+    private String expiredJwtToken;
 
     @BeforeEach
     void setUp() {
-        // Crear un token válido (expira en 1 hora desde ahora)
-        long validExpiration = ZonedDateTime.now().plusHours(1).toEpochSecond();
-        validToken = createJwtToken("usuario_test", validExpiration);
+        // Crear un token JWT válido (exp: 1 hora en el futuro)
+        long futureTime = System.currentTimeMillis() / 1000 + 3600; // Una hora en el futuro
+        String validPayload = String.format("{\"user_name\":\"testuser\",\"exp\":%d}", futureTime);
+        validJwtToken = createJwtToken(validPayload);
 
-        // Crear un token expirado (expiró hace 1 hora)
-        long expiredExpiration = ZonedDateTime.now().minusHours(1).toEpochSecond();
-        expiredToken = createJwtToken("usuario_test", expiredExpiration);
+        // Crear un token JWT expirado (exp: 1 hora en el pasado)
+        long pastTime = System.currentTimeMillis() / 1000 - 3600; // Una hora en el pasado
+        String expiredPayload = String.format("{\"user_name\":\"testuser\",\"exp\":%d}", pastTime);
+        expiredJwtToken = createJwtToken(expiredPayload);
+
+        // Reset session antes de cada prueba
+        UtilidadesApi.session = null;
+        UtilidadesApi.claveRutaAnonima = "clave-secreta";
+    }
+
+    private String createJwtToken(String payload) {
+        Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
+        String header = encoder.encodeToString("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes());
+        String encodedPayload = encoder.encodeToString(payload.getBytes());
+        String signature = encoder.encodeToString("dummy-signature".getBytes());
+        return String.format("%s.%s.%s", header, encodedPayload, signature);
     }
 
     @Test
-    void initSession_conTokenValido_deberiaIniciarSesion() {
+    void initSession_DebeCrearSesion_CuandoTokenEsValido() {
         // Arrange
-        String authHeader = "Bearer " + validToken;
-        when(request.getHeader("Authorization")).thenReturn(authHeader);
+        when(request.getHeader("access-key")).thenReturn(null);
+        when(request.getHeader("Authorization")).thenReturn("Bearer " + validJwtToken);
         when(request.getRequestURI()).thenReturn("/api/test");
 
         // Act
@@ -49,76 +60,83 @@ class UtilidadesApiTest {
 
         // Assert
         assertNotNull(UtilidadesApi.session);
+        assertEquals("testuser", UtilidadesApi.session.getUsuario());
         assertEquals("/api/test", UtilidadesApi.session.getService());
-        assertEquals("usuario_test", UtilidadesApi.session.getUsuario());
-        assertEquals(validToken, UtilidadesApi.session.getToken());
+        assertEquals(validJwtToken, UtilidadesApi.session.getToken());
     }
 
     @Test
-    void initSession_sinHeader_deberiLanzarUnauthorizedException() {
+    void initSession_DebeLanzarUnauthorizedException_CuandoTokenEstaExpirado() {
         // Arrange
+        when(request.getHeader("access-key")).thenReturn(null);
+        when(request.getHeader("Authorization")).thenReturn("Bearer " + expiredJwtToken);
+
+        // Act & Assert
+        assertThrows(UnauthorizedException.class, () -> UtilidadesApi.initSession(request));
+    }
+
+    @Test
+    void initSession_DebeCrearSesionAnonima_CuandoAccessKeyEsValida() {
+        // Arrange
+        when(request.getHeader("access-key")).thenReturn("clave-secreta");
+        when(request.getRequestURI()).thenReturn("/api/public");
+
+        // Act
+        UtilidadesApi.initSession(request);
+
+        // Assert
+        assertNotNull(UtilidadesApi.session);
+        assertEquals("anonimo", UtilidadesApi.session.getUsuario());
+        assertEquals("/api/public", UtilidadesApi.session.getService());
+        assertTrue(UtilidadesApi.session.getToken().isEmpty());
+    }
+
+    @Test
+    void initSession_DebeLanzarUnauthorizedException_CuandoAccessKeyEsInvalida() {
+        // Arrange
+        when(request.getHeader("access-key")).thenReturn("clave-incorrecta");
+
+        // Act & Assert
+        assertThrows(UnauthorizedException.class, () -> UtilidadesApi.initSession(request));
+    }
+
+    @Test
+    void initSession_DebeLanzarUnauthorizedException_CuandoNoHayTokenNiAccessKey() {
+        // Arrange
+        when(request.getHeader("access-key")).thenReturn(null);
         when(request.getHeader("Authorization")).thenReturn(null);
 
         // Act & Assert
-        assertThrows(UnauthorizedException.class, () ->
-                UtilidadesApi.initSession(request)
-        );
+        assertThrows(UnauthorizedException.class, () -> UtilidadesApi.initSession(request));
     }
 
     @Test
-    void initSession_conTokenExpirado_deberiaLanzarUnauthorizedException() {
-        // Arrange
-        String authHeader = "Bearer " + expiredToken;
-        when(request.getHeader("Authorization")).thenReturn(authHeader);
-
-        // Act & Assert
-        assertThrows(UnauthorizedException.class, () ->
-                UtilidadesApi.initSession(request)
-        );
-    }
-
-    @Test
-    void initSession_conTokenInvalido_deberiaLanzarUnauthorizedException() {
-        // Arrange
-        String authHeader = "Bearer invalid.token.format";
-        when(request.getHeader("Authorization")).thenReturn(authHeader);
-
-        // Act & Assert
-        assertThrows(UnauthorizedException.class, () ->
-                UtilidadesApi.initSession(request)
-        );
-    }
-
-    @Test
-    void decodificarJwt_conTokenValido_deberiaRetornarPayload() {
+    void decodificarJwt_DebeDecodificarPayload_CuandoTokenEsValido() {
         // Act
-        Map<String, Object> payload = UtilidadesApi.decodificarJwt(validToken);
+        Map<String, Object> resultado = UtilidadesApi.decodificarJwt(validJwtToken);
 
         // Assert
-        assertNotNull(payload);
-        assertEquals("usuario_test", payload.get("user_name"));
-        assertNotNull(payload.get("exp"));
+        assertNotNull(resultado);
+        assertEquals("testuser", resultado.get("user_name"));
+        assertNotNull(resultado.get("exp"));
     }
 
     @Test
-    void decodificarJwt_conTokenInvalido_deberiaLanzarUnauthorizedException() {
+    void decodificarJwt_DebeLanzarUnauthorizedException_CuandoTokenEsInvalido() {
+        // Arrange
+        String tokenInvalido = "invalid.token.format";
+
         // Act & Assert
-        assertThrows(UnauthorizedException.class, () ->
-                UtilidadesApi.decodificarJwt("invalid.token")
-        );
+        assertThrows(UnauthorizedException.class, () -> UtilidadesApi.decodificarJwt(tokenInvalido));
     }
 
-    // Método auxiliar para crear tokens JWT de prueba
-    private String createJwtToken(String username, long expiration) {
-        // Crear un token JWT simple para pruebas
-        String header = Base64.getUrlEncoder().encodeToString(
-                "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes()
-        );
-        String payload = Base64.getUrlEncoder().encodeToString(
-                String.format("{\"user_name\":\"%s\",\"exp\":%d}", username, expiration).getBytes()
-        );
-        String signature = Base64.getUrlEncoder().encodeToString("test-signature".getBytes());
+    @Test
+    void initSession_DebeLanzarUnauthorizedException_CuandoFormatoTokenEsInvalido() {
+        // Arrange
+        when(request.getHeader("access-key")).thenReturn(null);
+        when(request.getHeader("Authorization")).thenReturn("Bearer invalid-token");
 
-        return String.format("%s.%s.%s", header, payload, signature);
+        // Act & Assert
+        assertThrows(UnauthorizedException.class, () -> UtilidadesApi.initSession(request));
     }
 }
